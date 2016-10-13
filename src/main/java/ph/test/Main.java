@@ -29,8 +29,9 @@ public class Main {
 		Platform platform = new Platform().addType(Root.class, RootActor.class).addType(Foo.class, FooActor.class)
 				.start();
 
-		System.out.println("# ph.test.Root 1 frobnicate test");
-		System.out.println("# ph.test.Root 1 frassle test");
+		System.out.println("# call ph.test.Root 1 frobnicate test");
+		System.out.println("# signal ph.test.Foo 1 update xxx");
+		System.out.println("# call ph.test.Root 1 frassle test");
 
 		List<Pending> pending = new LinkedList<>();
 
@@ -43,8 +44,15 @@ public class Main {
 				break;
 			}
 			String[] ss = line.split(" ");
-			Output o = platform.call(ss[0], ss[1], ss[2], ss[3]);
-			pending.add(new Pending(i, o));
+			switch (ss[0]) {
+			case "call":
+				Output o = platform.call(ss[1], ss[2], ss[3], ss[4]);
+				pending.add(new Pending(i, o));
+				break;
+			case "signal":
+				platform.signal(ss[1], ss[2], ss[3], ss[4]);
+				break;
+			}
 			Pending p;
 			for (Iterator<Pending> it = pending.iterator(); it.hasNext();) {
 				p = it.next();
@@ -52,7 +60,7 @@ public class Main {
 					try {
 						System.out.format("[%d] > %s\n", p.number, p.output.get());
 					} catch (Exception e) {
-						System.out.format("[%d] ! %s\n",  p.number, e.getMessage());
+						System.out.format("[%d] ! %s\n", p.number, e.getMessage());
 					}
 					it.remove();
 				}

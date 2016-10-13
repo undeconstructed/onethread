@@ -66,14 +66,29 @@ public class Platform {
 		Output o = new Output<>();
 		call(o, "user", key, i, i.getMethod(method, String.class), new Object[] { input });
 
+		runOn();
+
+		return o;
+	}
+
+	public void signal(String type, String id, String method, String input) throws Exception {
+		if (actors == null) {
+			throw new RuntimeException("not started");
+		}
+		Class i = Class.forName(type);
+		String key = i.getCanonicalName() + ":" + id;
+		signal("user", key, i, i.getMethod(method, String.class), new Object[] { input });
+
+		runOn();
+	}
+
+	private void runOn() {
 		while (!tasks.isEmpty()) {
 			// System.out.println("tasks left: " + tasks.size());
 			Task task = tasks.poll();
 			System.out.println("running: " + task.desc);
 			task.work.run();
 		}
-
-		return o;
 	}
 
 	/**
@@ -107,20 +122,52 @@ public class Platform {
 						set(promise, rf.value, null);
 					} else {
 						Actor.ContinuationFuture c = (Actor.ContinuationFuture) future;
+						a.verify(c);
 						c.setListener((r, e) -> {
 							set(promise, r, e);
 						});
-						a.verify(c);
 					}
 				} catch (InvocationTargetException e) {
-					set(promise, null, new Problem("actor error: " + e.getCause().getMessage()));
+					set(promise, null, new Problem("actor call error: " + e.getCause().getMessage()));
 				} catch (Exception e) {
-					set(promise, null, new Problem("unknown error:" +  e.getMessage()));
+					set(promise, null, new Problem("unknown actor error: " + e.getMessage()));
 				}
 			} else {
-				a.enqueue(new Invocation(method, args));
+				a.enqueue(new Invocation(promise, self, key, i, method, args));
 			}
 		}));
+	}
+
+	void signal(String self, String key, Class i, Method method, Object[] args) {
+		tasks.add(new Task(self + " signal " + key + " " + method.getName(), () -> {
+			Actor a = actors.get(key);
+			if (a == null) {
+				try {
+					a = (Actor) actorTypes.get(i).newInstance();
+				} catch (Exception e) {
+					System.out.println("actor creation error: " + e.getMessage());
+					return;
+				}
+				actors.put(key, a);
+				a.setup(this, key);
+			}
+			try {
+				method.invoke(a, args);
+			} catch (InvocationTargetException e) {
+				System.out.println("actor signal error: " + e.getCause().getMessage());
+			} catch (Exception e) {
+				System.out.println("unknown actor error:" + e.getMessage());
+			}
+		}));
+	}
+
+	/**
+	 * Puts a queued invocation back into the system.
+	 * 
+	 * @param i
+	 */
+	void admit(Invocation i) {
+		call(i.promise, i.self, i.key, i.i, i.method, i.args);
 	}
 
 	/**

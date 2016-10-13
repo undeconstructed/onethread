@@ -3,6 +3,7 @@ package ph.onethread;
 import java.lang.reflect.Proxy;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Queue;
 
 /**
  * Sort of actor.
@@ -28,7 +29,7 @@ public class Actor {
 		}
 
 		public void set(T r, Problem e) {
-			continuations.remove(this);
+			removeContinuation(this);
 			listener.apply(r, e);
 		}
 
@@ -45,7 +46,7 @@ public class Actor {
 	// pending continuations
 	List<ContinuationFuture> continuations = new LinkedList<>();
 	// pending new work
-	List<Invocation> invocations = new LinkedList<>();
+	Queue<Invocation> invocations = new LinkedList<>();
 
 	/**
 	 * Tells the actor about its environment.
@@ -124,7 +125,7 @@ public class Actor {
 		if (f instanceof ContinuationFuture) {
 			ContinuationFuture<T> pf = (ContinuationFuture<T>) f;
 			pf.setListener((r, e) -> {
-				continuations.remove(f);
+				removeContinuation(f);
 				c.apply(r, e);
 			});
 		} else {
@@ -139,7 +140,16 @@ public class Actor {
 	 * @return
 	 */
 	protected <T> void ignore(Future<T> f) {
-		continuations.remove(f);
+		removeContinuation(f);
+	}
+
+	private final void removeContinuation(Future f) {
+		if (continuations.remove(f) && continuations.isEmpty()) {
+			Invocation i = invocations.poll();
+			if (i != null) {
+				platform.admit(i);
+			}
+		}
 	}
 
 	/**
@@ -156,7 +166,7 @@ public class Actor {
 
 	protected final <I> I find(Class<I> i, String id) {
 		return (I) Proxy.newProxyInstance(Actor.class.getClassLoader(), new Class[] { i }, (proxy, method, args) -> {
-			String target = i.getSimpleName() + ":" + id;
+			String target = i.getCanonicalName() + ":" + id;
 			ContinuationFuture f = new ContinuationFuture<>(key + " after " + target + " " + method.getName());
 			continuations.add(f);
 			platform.call(f, key, target, i, method, args);
