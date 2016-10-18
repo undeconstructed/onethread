@@ -46,7 +46,7 @@ public class Platform {
 		}
 	}
 
-	private Map<Class, Class> actorTypes;
+	private Map<Class, Function<Object, ?>> actorTypes;
 
 	private Map<String, Actor> actors;
 	private Queue<Task> tasks;
@@ -56,11 +56,11 @@ public class Platform {
 		actorTypes = new HashMap<>();
 	}
 
-	public <I, T extends I> Platform addType(Class<I> i, Class<T> t) {
+	public <I, T extends I> Platform addType(Class<I> i, Function<Object, T> f) {
 		if (actors != null) {
 			throw new RuntimeException("started");
 		}
-		actorTypes.put(i, t);
+		actorTypes.put(i, f);
 		return this;
 	}
 
@@ -130,16 +130,12 @@ public class Platform {
 	 */
 	void call(Object promise, String self, String key, Class i, Method method, Object[] args) {
 		Callable<List<Instruction>> work = () -> {
-			Actor a = actors.get(key);
-			if (a == null) {
-				try {
-					a = (Actor) actorTypes.get(i).newInstance();
-				} catch (Exception e) {
-					set(promise, null, new Problem("actor creation error: " + e.getMessage()));
-					return Collections.emptyList();
-				}
-				actors.put(key, a);
-				a.setup(this, i, key);
+			Actor a;
+			try {
+				a = getActor(key, i);
+			} catch (ProblemException e) {
+				set(promise, null, e.problem);
+				return Collections.emptyList();
 			}
 			if (a.isAvailable()) {
 				try {
@@ -170,18 +166,35 @@ public class Platform {
 		tasks.add(new Task(self + " call " + key + " " + method.getName(), work));
 	}
 
+	/**
+	 * @return
+	 */
+	private Actor getActor(String key, Class i) throws ProblemException {
+		Actor a = actors.get(key);
+		if (a == null) {
+			Function<Object, ?> f = actorTypes.get(i);
+			if (f == null) {
+				throw new ProblemException(new Problem("missing actor type: " + i.getCanonicalName()));
+			}
+			try {
+				a = (Actor) f.apply(null);
+			} catch (Exception e) {
+				throw new ProblemException(new Problem("actor creation error: " + e.getMessage()));
+			}
+			actors.put(key, a);
+			a.setup(this, i, key);
+		}
+		return a;
+	}
+
 	void signal(String self, String key, Class i, Method method, Object[] args) {
 		Callable<List<Instruction>> work = () -> {
-			Actor a = actors.get(key);
-			if (a == null) {
-				try {
-					a = (Actor) actorTypes.get(i).newInstance();
-				} catch (Exception e) {
-					System.out.println("actor creation error: " + e.getMessage());
-					return Collections.emptyList();
-				}
-				actors.put(key, a);
-				a.setup(this, i, key);
+			Actor a;
+			try {
+				a = getActor(key, i);
+			} catch (ProblemException e) {
+				System.out.println("actor creation error: " + e.problem);
+				return Collections.emptyList();
 			}
 			try {
 				method.invoke(a, args);

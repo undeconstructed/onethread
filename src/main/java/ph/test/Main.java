@@ -63,8 +63,8 @@ class Controller implements Runnable {
 	@Override
 	public void run() {
 
-		Platform platform = new Platform().addType(Root.class, RootActor.class).addType(Foo.class, FooActor.class)
-				.start();
+		Platform platform = new Platform().addType(Root.class, (x) -> new RootActor())
+				.addType(Foo.class, (x) -> new FooActor()).start();
 
 		while (true) {
 			try {
