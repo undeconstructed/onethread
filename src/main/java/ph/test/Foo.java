@@ -9,5 +9,5 @@ public interface Foo {
 
 	public Future<String> process(String input);
 
-	public void update(String anything);
+	public void signal(String anything);
 }

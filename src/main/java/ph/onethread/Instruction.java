@@ -8,12 +8,18 @@ import ph.onethread.Actor.ContinuationFuture;
 @SuppressWarnings("rawtypes")
 public class Instruction {
 
-	private ContinuationFuture f;
-	private Object args;
+	private final SignalTemplate signal;
+	final ContinuationFuture f;
+	private final Object args;
 
-	Instruction(ContinuationFuture f, Object args) {
+	Instruction(SignalTemplate signal, ContinuationFuture f, Object args) {
+		this.signal = signal;
 		this.f = f;
 		this.args = args;
+	}
+
+	public SignalTemplate getSignal() {
+		return signal;
 	}
 
 	/**

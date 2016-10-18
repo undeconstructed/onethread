@@ -42,6 +42,8 @@ public class Actor {
 
 	// link back to platform
 	Platform platform;
+	// own type
+	Class<?> type;
 	// own key
 	String key;
 	// pending continuations
@@ -57,8 +59,9 @@ public class Actor {
 	 * @param platform
 	 * @param key
 	 */
-	final void setup(Platform platform, String key) {
+	final void setup(Platform platform, Class<?> type, String key) {
 		this.platform = platform;
+		this.type = type;
 		this.key = key;
 	}
 
@@ -188,7 +191,7 @@ public class Actor {
 	protected final <T> Future<T> instruct(Object args) {
 		ContinuationFuture f = new ContinuationFuture<>(key + " after instruction");
 		continuations.add(f);
-		instructions.add(new Instruction(f, args));
+		instructions.add(new Instruction(new SignalTemplate(type.getCanonicalName(), key, "signal"), f, args));
 		return f;
 	}
 

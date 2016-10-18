@@ -3,13 +3,17 @@ package ph.test;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import ph.onethread.Instruction;
-import ph.onethread.Output;
+import ph.onethread.InstructionsAndResults;
 import ph.onethread.Platform;
+import ph.onethread.Result;
+import ph.onethread.SignalTemplate;
 
 class MainTask {
 
@@ -24,14 +28,28 @@ class MainTask {
 
 class Command {
 
+	final String number;
 	final String string;
 
-	public Command(String string) {
+	public Command(String number, String string) {
+		this.number = number;
 		this.string = string;
 	}
 }
 
 class Signal {
+
+	final SignalTemplate signal;
+	final String data;
+
+	public Signal(SignalTemplate signal, String data) {
+		this.signal = signal;
+		this.data = data;
+	}
+
+	public String getData() {
+		return data;
+	}
 }
 
 /**
@@ -39,14 +57,8 @@ class Signal {
  */
 class Controller implements Runnable {
 
-	BlockingQueue<MainTask> queue = new LinkedBlockingQueue<>();
-
-	/**
-	 * @param randomWork
-	 */
-	public Controller(RandomWork randomWork) {
-		// TODO Auto-generated constructor stub
-	}
+	private BlockingQueue<MainTask> queue = new LinkedBlockingQueue<>();
+	private RandomWork worker;
 
 	@Override
 	public void run() {
@@ -58,11 +70,10 @@ class Controller implements Runnable {
 			try {
 				MainTask task = queue.take();
 				if (task.command != null) {
-					List<Instruction> is = platform.call("xxx", "ph.test.Root", "1", "serve", task.command.string);
-					for (Instruction i : is) {
-						// TODO - act on i in a way that gets the result back in to wherever
-					}
+					process(platform.call(task.command.number, "ph.test.Root:1", "serve", task.command.string));
 				} else if (task.signal != null) {
+					SignalTemplate s = task.signal.signal;
+					process(platform.signal(s.getKey(), s.getMethod(), task.signal.getData()));
 				}
 			} catch (InterruptedException e) {
 				return;
@@ -73,8 +84,29 @@ class Controller implements Runnable {
 		}
 	}
 
-	public void command(String string) throws InterruptedException {
-		queue.put(new MainTask(new Command(string), null));
+	private void process(InstructionsAndResults iar) {
+		for (Instruction i : iar.getInstructions()) {
+			worker.perform(i.getSignal(), i.getArgs());
+		}
+		for (Result r : iar.getResults()) {
+			if (r.getProblem() != null) {
+				System.out.format("[%s] ! %s\n", r.getKey(), r.getProblem());
+			} else {
+				System.out.format("[%s] > %s\n", r.getKey(), r.getResult());
+			}
+		}
+	}
+
+	public void command(int n, String string) throws InterruptedException {
+		queue.put(new MainTask(new Command(Integer.toString(n), string), null));
+	}
+
+	public void signal(SignalTemplate signal, String data) throws InterruptedException {
+		queue.put(new MainTask(null, new Signal(signal, data)));
+	}
+
+	public void addWorker(RandomWork randomWork) {
+		this.worker = randomWork;
 	}
 }
 
@@ -83,8 +115,35 @@ class Controller implements Runnable {
  */
 class RandomWork implements Runnable {
 
+	private final Controller controller;
+	List<SignalTemplate> work = new ArrayList<>();
+	Random rand = new Random();
+
+	public RandomWork(Controller controller) {
+		this.controller = controller;
+	}
+
+	public synchronized void perform(SignalTemplate signal, Object object) {
+		work.add(signal);
+	}
+
 	@Override
 	public void run() {
+		while (true) {
+			try {
+				Thread.sleep(rand.nextInt(5000) + 2000);
+				synchronized (this) {
+					if (!work.isEmpty()) {
+						int r = rand.nextInt(work.size());
+						SignalTemplate signal = work.remove(r);
+						System.out.println("working for " + signal);
+						controller.signal(signal, "random-string");
+					}
+				}
+			} catch (InterruptedException e) {
+				return;
+			}
+		}
 	}
 }
 
@@ -95,17 +154,6 @@ class ServerThing implements Runnable {
 
 	private Controller controller;
 
-	static class Pending {
-
-		int number;
-		Output output;
-
-		public Pending(int number, Output output) {
-			this.number = number;
-			this.output = output;
-		}
-	}
-
 	public ServerThing(Controller controller) {
 		this.controller = controller;
 	}
@@ -114,20 +162,25 @@ class ServerThing implements Runnable {
 	public void run() {
 		BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
 		String line;
-		for (int i = 1;; i++) {
+		for (int i = 1;;) {
 			try {
 				System.out.format("[%d] $ ", i);
 				line = in.readLine();
 				if (line == null) {
-					break;
+					continue;
 				}
-				controller.command(line);
+				line = line.trim();
+				if (line.isEmpty()) {
+					continue;
+				}
+				controller.command(i, line);
 			} catch (IOException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			} catch (InterruptedException e) {
 				return;
 			}
+			i++;
 		}
 	}
 }
@@ -139,9 +192,15 @@ public class Main {
 
 	public static void main(String[] args) throws Exception {
 
-		RandomWork randomWork = new RandomWork();
-		Controller controller = new Controller(randomWork);
+		// controller contains the brain
+		Controller controller = new Controller();
+
+		// things that will be part of the body
+		RandomWork randomWork = new RandomWork(controller);
 		ServerThing inputThing = new ServerThing(controller);
+
+		// let the brain know about the body
+		controller.addWorker(randomWork);
 
 		// explicitly threaded things
 		new Thread(controller).start();
@@ -149,6 +208,8 @@ public class Main {
 		new Thread(inputThing).start();
 
 		// main thread is no use to us
-		new Object().wait();
+		synchronized (Main.class) {
+			Main.class.wait();
+		}
 	}
 }

@@ -16,11 +16,12 @@ public class FooActor extends Actor implements Foo {
 	public Future<String> process(String input) {
 		this.input = input;
 		this.promise = promise();
+		ignore(instruct("test"));
 		return promise;
 	}
 
 	@Override
-	public void update(String update) {
+	public void signal(String update) {
 		if (promise != null) {
 			promise.set(input + "+" + update, null);
 			promise = null;

@@ -10,24 +10,47 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.Callable;
 
-class Task {
-
-	String desc;
-	Callable<List<Instruction>> work;
-
-	public Task(String desc, Callable<List<Instruction>> work) {
-		this.desc = desc;
-		this.work = work;
-	}
-}
-
+/**
+ * TODO
+ */
 @SuppressWarnings({ "rawtypes", "unchecked" })
 public class Platform {
+
+	/**
+	 * TODO
+	 */
+	private static class Task {
+
+		String desc;
+		Callable<List<Instruction>> work;
+
+		public Task(String desc, Callable<List<Instruction>> work) {
+			this.desc = desc;
+			this.work = work;
+		}
+	}
+
+	/**
+	 * TODO
+	 */
+	private class Output {
+
+		private final String xxx;
+
+		public Output(String xxx) {
+			this.xxx = xxx;
+		}
+
+		void set(Object r, Problem e) {
+			results.add(new Result(xxx, r, e));
+		}
+	}
 
 	private Map<Class, Class> actorTypes;
 
 	private Map<String, Actor> actors;
 	private Queue<Task> tasks;
+	private List<Result> results;
 
 	public Platform() {
 		actorTypes = new HashMap<>();
@@ -52,6 +75,7 @@ public class Platform {
 		}
 		actors = new HashMap<>();
 		tasks = new LinkedList<>();
+		results = new LinkedList<>();
 		return this;
 	}
 
@@ -60,38 +84,39 @@ public class Platform {
 	 * 
 	 * @param input
 	 */
-	public List<Instruction> call(String xxx, String type, String id, String method, String input) throws Exception {
+	public InstructionsAndResults call(String xxx, String key, String method, String input) throws Exception {
 		if (actors == null) {
 			throw new RuntimeException("not started");
 		}
-		Class i = Class.forName(type);
-		String key = i.getCanonicalName() + ":" + id;
-		Output o = new Output<>();
-		call(o, "user", key, i, i.getMethod(method, String.class), new Object[] { input });
+		Class i = Class.forName(key.substring(0, key.indexOf(':')));
+		call(new Output(xxx), "user", key, i, i.getMethod(method, String.class), new Object[] { input });
 
 		return runOn();
 	}
 
-	public List<Instruction> signal(String type, String id, String method, String input) throws Exception {
+	public InstructionsAndResults signal(String key, String method, String input) throws Exception {
 		if (actors == null) {
 			throw new RuntimeException("not started");
 		}
-		Class i = Class.forName(type);
-		String key = i.getCanonicalName() + ":" + id;
+		Class i = Class.forName(key.substring(0, key.indexOf(':')));
 		signal("user", key, i, i.getMethod(method, String.class), new Object[] { input });
 
 		return runOn();
 	}
 
-	private List<Instruction> runOn() throws Exception {
-		LinkedList<Instruction> out = new LinkedList<>();
+	private InstructionsAndResults runOn() throws Exception {
+		List<Instruction> instructions = new LinkedList<>();
 		while (!tasks.isEmpty()) {
 			// System.out.println("tasks left: " + tasks.size());
 			Task task = tasks.poll();
 			System.out.println("running: " + task.desc);
-			out.addAll(task.work.call());
+			instructions.addAll(task.work.call());
 		}
-		return out;
+		List<Result> rs = this.results;
+		if (!rs.isEmpty()) {
+			this.results = new LinkedList<>();
+		}
+		return new InstructionsAndResults(instructions, rs);
 	}
 
 	/**
@@ -114,7 +139,7 @@ public class Platform {
 					return Collections.emptyList();
 				}
 				actors.put(key, a);
-				a.setup(this, key);
+				a.setup(this, i, key);
 			}
 			if (a.isAvailable()) {
 				try {
@@ -156,7 +181,7 @@ public class Platform {
 					return Collections.emptyList();
 				}
 				actors.put(key, a);
-				a.setup(this, key);
+				a.setup(this, i, key);
 			}
 			try {
 				method.invoke(a, args);
@@ -190,9 +215,10 @@ public class Platform {
 			tasks.add(new Task("continue " + promise, () -> {
 				((Actor.ContinuationFuture) promise).set(r, e);
 				// TODO - this is wrong
-					return Collections.emptyList();
-				}));
+				return Collections.emptyList();
+			}));
 		} else if (promise instanceof Output) {
+			System.out.format("setting output: %s, %s%n", e, r);
 			((Output) promise).set(r, e);
 		}
 	}
