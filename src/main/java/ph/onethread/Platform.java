@@ -2,17 +2,20 @@ package ph.onethread;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.concurrent.Callable;
 
 class Task {
 
 	String desc;
-	Runnable work;
+	Callable<List<Instruction>> work;
 
-	public Task(String desc, Runnable work) {
+	public Task(String desc, Callable<List<Instruction>> work) {
 		this.desc = desc;
 		this.work = work;
 	}
@@ -57,7 +60,7 @@ public class Platform {
 	 * 
 	 * @param input
 	 */
-	public Output call(String type, String id, String method, String input) throws Exception {
+	public List<Instruction> call(String xxx, String type, String id, String method, String input) throws Exception {
 		if (actors == null) {
 			throw new RuntimeException("not started");
 		}
@@ -66,12 +69,10 @@ public class Platform {
 		Output o = new Output<>();
 		call(o, "user", key, i, i.getMethod(method, String.class), new Object[] { input });
 
-		runOn();
-
-		return o;
+		return runOn();
 	}
 
-	public void signal(String type, String id, String method, String input) throws Exception {
+	public List<Instruction> signal(String type, String id, String method, String input) throws Exception {
 		if (actors == null) {
 			throw new RuntimeException("not started");
 		}
@@ -79,16 +80,18 @@ public class Platform {
 		String key = i.getCanonicalName() + ":" + id;
 		signal("user", key, i, i.getMethod(method, String.class), new Object[] { input });
 
-		runOn();
+		return runOn();
 	}
 
-	private void runOn() {
+	private List<Instruction> runOn() throws Exception {
+		LinkedList<Instruction> out = new LinkedList<>();
 		while (!tasks.isEmpty()) {
 			// System.out.println("tasks left: " + tasks.size());
 			Task task = tasks.poll();
 			System.out.println("running: " + task.desc);
-			task.work.run();
+			out.addAll(task.work.call());
 		}
+		return out;
 	}
 
 	/**
@@ -101,14 +104,14 @@ public class Platform {
 	 * @param args
 	 */
 	void call(Object promise, String self, String key, Class i, Method method, Object[] args) {
-		tasks.add(new Task(self + " call " + key + " " + method.getName(), () -> {
+		Callable<List<Instruction>> work = () -> {
 			Actor a = actors.get(key);
 			if (a == null) {
 				try {
 					a = (Actor) actorTypes.get(i).newInstance();
 				} catch (Exception e) {
 					set(promise, null, new Problem("actor creation error: " + e.getMessage()));
-					return;
+					return Collections.emptyList();
 				}
 				actors.put(key, a);
 				a.setup(this, key);
@@ -120,12 +123,14 @@ public class Platform {
 						ValueFuture rf = (ValueFuture) future;
 						a.verify(null);
 						set(promise, rf.value, null);
+						return a.anyInstructions();
 					} else {
 						Actor.ContinuationFuture c = (Actor.ContinuationFuture) future;
 						a.verify(c);
 						c.setListener((r, e) -> {
 							set(promise, r, e);
 						});
+						return a.anyInstructions();
 					}
 				} catch (InvocationTargetException e) {
 					set(promise, null, new Problem("actor call error: " + e.getCause().getMessage()));
@@ -135,30 +140,35 @@ public class Platform {
 			} else {
 				a.enqueue(new Invocation(promise, self, key, i, method, args));
 			}
-		}));
+			return Collections.emptyList();
+		};
+		tasks.add(new Task(self + " call " + key + " " + method.getName(), work));
 	}
 
 	void signal(String self, String key, Class i, Method method, Object[] args) {
-		tasks.add(new Task(self + " signal " + key + " " + method.getName(), () -> {
+		Callable<List<Instruction>> work = () -> {
 			Actor a = actors.get(key);
 			if (a == null) {
 				try {
 					a = (Actor) actorTypes.get(i).newInstance();
 				} catch (Exception e) {
 					System.out.println("actor creation error: " + e.getMessage());
-					return;
+					return Collections.emptyList();
 				}
 				actors.put(key, a);
 				a.setup(this, key);
 			}
 			try {
 				method.invoke(a, args);
+				return a.anyInstructions();
 			} catch (InvocationTargetException e) {
 				System.out.println("actor signal error: " + e.getCause().getMessage());
 			} catch (Exception e) {
 				System.out.println("unknown actor error:" + e.getMessage());
 			}
-		}));
+			return Collections.emptyList();
+		};
+		tasks.add(new Task(self + " signal " + key + " " + method.getName(), work));
 	}
 
 	/**
@@ -179,7 +189,9 @@ public class Platform {
 		if (promise instanceof Actor.ContinuationFuture) {
 			tasks.add(new Task("continue " + promise, () -> {
 				((Actor.ContinuationFuture) promise).set(r, e);
-			}));
+				// TODO - this is wrong
+					return Collections.emptyList();
+				}));
 		} else if (promise instanceof Output) {
 			((Output) promise).set(r, e);
 		}

@@ -10,7 +10,7 @@ import ph.onethread.Promise;
 public class RootActor extends Actor implements Root {
 
 	@Override
-	public Future<String> frobnicate(String input) {
+	public Future<String> serve(String input) {
 		Foo foo1 = find(Foo.class, "1");
 		Promise<String> p = promise();
 		after(foo1.process(input), (r, e) -> {

@@ -7,7 +7,7 @@ import ph.onethread.Future;
  */
 public interface Root {
 
-	public Future<String> frobnicate(String input);
+	public Future<String> serve(String input);
 
 	public Future<String> frassle(String input);
 }

@@ -1,6 +1,7 @@
 package ph.onethread;
 
 import java.lang.reflect.Proxy;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
@@ -45,6 +46,8 @@ public class Actor {
 	String key;
 	// pending continuations
 	List<ContinuationFuture> continuations = new LinkedList<>();
+	// work the actor wants to see done elsewhere
+	List<Instruction> instructions = new LinkedList<>();
 	// pending new work
 	Queue<Invocation> invocations = new LinkedList<>();
 
@@ -87,6 +90,18 @@ public class Actor {
 	 */
 	final void enqueue(Invocation invocation) {
 		invocations.add(invocation);
+	}
+
+	/**
+	 * @return
+	 */
+	final List<Instruction> anyInstructions() {
+		if (!instructions.isEmpty()) {
+			List<Instruction> t = instructions;
+			instructions = new LinkedList<>();
+			return t;
+		}
+		return Collections.emptyList();
 	}
 
 	/**
@@ -162,6 +177,19 @@ public class Actor {
 	 */
 	protected <T, T1> Future<T> follow(Future<T> f, Function<T, T1> onSuccess, Function<Throwable, T1> onFailure) {
 		return null;
+	}
+
+	/**
+	 * Sends an instruction back up to the controller, probably to get some external work done.
+	 * 
+	 * @param args
+	 * @return
+	 */
+	protected final <T> Future<T> instruct(Object args) {
+		ContinuationFuture f = new ContinuationFuture<>(key + " after instruction");
+		continuations.add(f);
+		instructions.add(new Instruction(f, args));
+		return f;
 	}
 
 	protected final <I> I find(Class<I> i, String id) {
