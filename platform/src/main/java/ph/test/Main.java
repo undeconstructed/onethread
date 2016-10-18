@@ -9,11 +9,11 @@ import java.util.Random;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 
-import ph.onethread.Instruction;
-import ph.onethread.InstructionsAndResults;
-import ph.onethread.Platform;
-import ph.onethread.Result;
-import ph.onethread.SignalTemplate;
+import onethread.Instruction;
+import onethread.InstructionsAndResults;
+import onethread.Platform;
+import onethread.Result;
+import onethread.SignalTemplate;
 
 class MainTask {
 

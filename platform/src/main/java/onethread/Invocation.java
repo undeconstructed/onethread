@@ -1,4 +1,4 @@
-package ph.onethread;
+package onethread;
 
 import java.lang.reflect.Method;
 

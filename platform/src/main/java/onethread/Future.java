@@ -1,4 +1,4 @@
-package ph.onethread;
+package onethread;
 
 /**
  * Really lightweight future, basically just a marker.

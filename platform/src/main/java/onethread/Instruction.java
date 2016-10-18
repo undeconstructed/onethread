@@ -1,6 +1,6 @@
-package ph.onethread;
+package onethread;
 
-import ph.onethread.Actor.ContinuationFuture;
+import onethread.Actor.ContinuationFuture;
 
 /**
  * Allows an actor to get external work done, via a controller.

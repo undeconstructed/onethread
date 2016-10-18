@@ -1,8 +1,8 @@
 package ph.test;
 
-import ph.onethread.Actor;
-import ph.onethread.Future;
-import ph.onethread.Promise;
+import onethread.Actor;
+import onethread.Future;
+import onethread.Promise;
 
 /**
  * TODO

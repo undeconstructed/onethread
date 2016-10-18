@@ -1,4 +1,4 @@
-package ph.onethread;
+package onethread;
 
 /**
  * Actually a value, but matches the future contract.

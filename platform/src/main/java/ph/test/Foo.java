@@ -1,6 +1,6 @@
 package ph.test;
 
-import ph.onethread.Future;
+import onethread.Future;
 
 /**
  * TODO
